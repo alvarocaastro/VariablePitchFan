@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# LaTeX
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+*.bbl
+*.blg
+*.bcf
+*.run.xml
+
+# Results — ignorar contenido pero mantener estructura de carpetas
+results/**
+!results/**/
+!results/**/.gitkeep
+
+# XFOIL — archivos temporales y de salida generados durante simulaciones
+# (XFOIL escribe en data/airfoils/ como cwd y puede dejar .dat sueltos)
+data/airfoils/polar.dat
+data/airfoils/*.test_polar.txt
+data/airfoils/*_polar.txt
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+
+# Test / coverage reports
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Type checker / notebook caches
+.mypy_cache/
+.pyright/
+.ipynb_checkpoints/
+
+# XFOIL / Fortran-style scratch files
+fort.*
+*.ps
+*.plt

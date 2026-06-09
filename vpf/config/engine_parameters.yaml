@@ -1,0 +1,130 @@
+# Engine and mission parameters for the VPF analysis pipeline
+# Reference architecture: UHBPR direct-drive turbofan — BPR=15, FPR=1.30
+# Baseline engine analogy: GE9X-105B1A (Boeing 777X), fan diameter 3.40 m (BPR≈10)
+
+# ── Baseline engine performance ──────────────────────────────────────────────
+
+# Cruise SFC [lb/(lbf·h)] — GE9X-105B1A public value (matches GE9X_PARAMS in engine_data.py)
+baseline_sfc: 0.49
+
+# Baseline fan adiabatic efficiency — GE9X: ~0.90–0.92 (16-blade wide-chord)
+fan_efficiency: 0.90
+
+# Ultra-high bypass ratio — UHBPR target: BPR = 15
+bypass_ratio: 15.0
+
+# Fan Pressure Ratio — reduced to 1.30 (UHBPR cruise design point, enabled by VPF)
+# VPF prevents stall at low FPR during takeoff by adjusting blade pitch in real time.
+fan_pressure_ratio: 1.30
+
+# Direct-drive: fan is coupled directly to the LPT shaft (no planetary gearbox).
+# gear_ratio = 1.0 → ω_fan = ω_shaft; fan RPM equals LPT RPM directly.
+gear_ratio: 1.0
+
+# ── SFC phase multipliers ────────────────────────────────────────────────────
+# SFC at each flight phase relative to cruise (used by Stage 7 sfc_core.py).
+# Values derived from typical turbofan part-power SFC behaviour.
+# Refs: Walsh & Fletcher (2004), Gas Turbine Performance, ch. 9, figs 9.19–9.22.
+#       Saravanamuttoo et al. (2017), Gas Turbine Theory, §5.3.
+sfc_multipliers:
+  takeoff: 1.15   # Full thrust → near-ideal combustion but high fuel flow
+  climb:   1.05   # Reduced thrust, slightly off peak thermal efficiency
+  cruise:  1.00   # Design point — reference
+  descent: 1.60   # Idle/low thrust (thrust_fraction=0.05): SFC rises steeply.
+                  # At ~5% thrust the engine operates far off its thermodynamic
+                  # design point. Typical range: 1.5–2.0 × SFC_cruise.
+                  # Value 1.60 is the central estimate from Walsh & Fletcher
+                  # (2004) fig. 9.20 at N1 ≈ 60–65 % (flight idle).
+  hold:    1.08   # Level hold, Mach 0.5, 20 000 ft — part-power, near-idle thrust.
+                  # Lower penalty than descent because N1 is higher (~70–75 %).
+                  # VPF advantage is largest here (~11–16 % fuel saving) due to
+                  # off-design incidence correction at low flight speed.
+
+# ── Efficiency transfer coefficient ─────────────────────────────────────────
+# τ: fraction of 2D blade section efficiency gain that propagates to 3D fan η.
+# For a UHBPR fan (BPR=15, FPR=1.30, h/t ≈ 0.28) three loss mechanisms absent
+# from XFOIL suppress the 2D→3D transfer:
+#
+#   (1) Transonic tip shocks: relative tip Mach ≈ 1.35–1.50 at FPR=1.30 generates
+#       passage shocks and shock/BL interactions (Gunn & Hall 2014, ASME GT2014-26698).
+#       Reduces the usable τ by ≈ 55% relative to fully subsonic fans.
+#
+#   (2) Secondary / endwall flows: at h/t ≈ 0.28 (BPR=15), secondary losses reach
+#       40–55% of total blade-row loss vs ≈ 25% for conventional fans (h/t ≈ 0.50).
+#       Koch & Smith (1976), Trans. ASME J. Eng. Power 98(3): 411–424, Fig. 14.
+#       Smith (1970), "Casing Boundary Layers in Multistage Compressors," Elsevier,
+#       §3: hub BL blockage 8–12% annulus at low span.
+#
+#   (3) Tip clearance: Denton (1993), ASME 93-GT-435, loss model ε_tip ≈ 0.9×(δ_c/h).
+#       UHBPR tip clearance δ_c/h ≈ 3.5–4 % → ε_tip ≈ 3.2–3.6% absolute η loss,
+#       none of which is captured in 2D XFOIL panel analysis.
+#
+# Derivation (multiplicative penalty factors on Cumpsty 2004 §4.3.2 baseline):
+#   τ_conv ≈ 0.35 (Cumpsty, median of 0.30–0.60 range for conventional turbofans)
+#   × 0.45 (Gunn–Hall transonic shock penalty)
+#   × 0.55 (Koch–Smith low-h/t secondary-flow factor)
+#   × 0.75 (Denton/Smith tip-clearance/endwall factor)
+#   ≈ 0.065  →  rounded up to 0.08 (conservative safety margin).
+profile_efficiency_transfer: 0.08
+
+# ── Mission profile ───────────────────────────────────────────────────────────
+# Reference mission: B777X medium-haul (~8.8 h block time, ~13 000 km).
+# thrust_fraction: fraction of design_thrust_kN at each phase.
+# duration_min:    typical phase duration [minutes].
+mission:
+  phases:
+    takeoff:  {duration_min:   3.5, thrust_fraction: 1.00}  # ground roll (0.5) + TOGA initial climb to 1500 ft AGL (~3 min)
+    climb:    {duration_min:  25.0, thrust_fraction: 0.75}
+    cruise:   {duration_min: 480.0, thrust_fraction: 0.25}
+    descent:  {duration_min:  40.0, thrust_fraction: 0.05}
+    hold:     {duration_min:  60.0, thrust_fraction: 0.12}  # Mach 0.5, 20 000 ft, 60 min
+  design_thrust_kN: 467.0        # GE9X-105B1A sea-level static thrust per engine [kN]
+                                 # 105,000 lbf × 4.448 N/lbf = 467,040 N = 467 kN
+                                 # Source: EASA TCDS E.110 / FAA TCDS E00078NE
+  fuel_price_usd_per_kg: 0.90    # Jet-A1 — IATA average 2023–2024 [USD/kg]
+
+# ── Fleet CO₂ annualisation ───────────────────────────────────────────────────
+# Used by Stage 7 to extrapolate per-mission CO₂ saving to fleet level.
+fleet_co2:
+  aircraft_count: 205                  # Emirates firm 777X order — Emirates Annual Report FY2024-25 (31 Mar 2025)
+  flights_per_day_per_aircraft: 2      # Emirates 777 fleet avg utilisation: ~12.8 block-h/day ÷ ~6.5h avg sector
+
+# ── Reverse thrust (Stage 6) ──────────────────────────────────────────────────
+# Stage 6 computes mechanism weight and SFC cruise penalty only.
+# No aerodynamic sweep is performed (requires validated post-stall polars).
+# See docs/design_decisions.md §9 for rationale.
+reverse_thrust:
+  # Mechanism weight — basis for Stage 7 SFC cruise penalty.
+  # Sources:
+  #   engine_dry_weight_kg : EASA TCDS E.110 (GE9X-1B, rev. 10) — 8 276 kg (18 247 lb)
+  #   conventional_reverser: full cascade TRU system (blocker doors, D-duct, actuator
+  #                          fairings) ≈ 9.5 % of engine dry weight (≈ 786 kg/engine).
+  #                          Ref: Howe (2000), Aircraft Conceptual Design Synthesis;
+  #                               Leylekian et al. (2014) nacelle weight breakdown.
+  #   aircraft_L_D         : B777X cruise L/D ≈ 20–21 (GE/Boeing public data).
+  engine_dry_weight_kg: 8276.0          # GE9X-1B dry weight per engine [kg] — EASA TCDS E.110
+  mechanism_weight_fraction: 0.04       # VPF pitch-change mechanism ≈ 4 % of engine dry weight
+  conventional_reverser_fraction: 0.095 # Cascade TRU elimination credit ≈ 9.5 % of engine dry weight
+  aircraft_L_D: 20.5                    # B777X cruise lift-to-drag ratio
+
+  # Fan diameter scaling — D^2.5 law (Raymer 2018; Roskam Vol. V).
+  # fan_diameter_ratio = sqrt(BPR_uhbpr / BPR_ref) = sqrt(15/10) ≈ 1.224
+  fan_diameter_ratio: 1.224            # D_uhbpr/D_ref; ref BPR≈10, target BPR=15
+
+# ── Economic analysis ─────────────────────────────────────────────────────────
+# Reference operator: Emirates — world's largest 777X customer (205 aircraft firm order).
+# Jet-A1 price: IATA weekly average spot price, May 2026.
+# EUR/USD rate: ECB reference rate, May 2026.
+# avg_fare_eur: Emirates FY2024-25 Annual Report — passenger revenue / passengers carried
+#   = AED 111.8B / 53.7M pax = AED 2,080/pax × 0.25 EUR/AED = 520 EUR/pax
+# seats_per_aircraft: Emirates plans 4-class 777-9 (First/Business/PremEco/Eco).
+#   Configuration not yet officially disclosed. Boeing 3-class spec = 349 seats.
+#   Estimate: 350 seats (conservative 4-class, consistent with Boeing spec).
+economic_analysis:
+  fuel_price_iata_usd_per_kg: 0.75    # Jet-A1 IATA spot price May 2026 [USD/kg]
+  eur_usd_rate: 1.085                 # EUR/USD ECB reference rate May 2026
+  engines_per_aircraft: 2             # B777X twin-engine configuration
+  seats_per_aircraft: 350             # Emirates 777-9 estimated 4-class layout (~Boeing 3-class spec 349)
+  avg_fare_eur: 520.0                 # Emirates avg revenue/pax FY2024-25 (AED 2080 × 0.25 EUR/AED)
+  aircraft_mtow_kg: 352400           # B777-9 MTOW [kg] — Boeing commercial airplanes spec (public)
+  eu_ets_carbon_price_eur_per_tonne: 65.0  # EU ETS allowance price — ICAP 2024 average [EUR/tCO2]

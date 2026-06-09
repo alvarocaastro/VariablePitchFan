@@ -1,0 +1,186 @@
+# Configuration file for VPF Aerodynamic Analysis Pipeline
+# Reference fan class: UHBPR direct-drive (BPR=15), GE9X-sized geometry (r_tip=1.70 m)
+
+# Reference Mach number for XFOIL simulations (incompressible baseline)
+reference_mach: 0.2
+
+# Condition-level Mach numbers (mid-span M_rel) used by Stage 5 kinematics and
+# the pipeline summary. Values represent W_rel/a at mid-span.
+# Derived from fan_geometry: M_tip_design × r_rel_mid / sqrt(r_rel_mid² + phi²)
+# Per-section values in target_mach_per_section are used by Stage 3 corrections.
+target_mach:
+  takeoff: 0.90   # W_mid/a = 305/340 = 0.90 (ISA SL, phi=0.429, M_tip=1.234)
+  climb:   0.86   # W_mid/a = 278/322 = 0.86 (FL150, phi=0.396, M_tip=1.217)
+  cruise:  0.89   # W_mid/a = 262/295 = 0.89 (FL350, phi=0.411, M_tip=1.237)
+  descent: 0.74   # W_mid/a = 244/328 = 0.74 (FL100, phi=0.351, M_tip=1.086)
+
+# Per-section relative Mach numbers — physically correct values for each (condition, section).
+# M_rel = sqrt(Va² + U_sec²) / a_altitude
+#   U_sec = omega × r_sec = M_tip × a × r_rel_sec
+#   Va    = phi × omega × r_tip = phi × M_tip × a
+#   ISA speed of sound: SL=340 m/s, FL100=328 m/s, FL150=322 m/s, FL350=295 m/s
+#
+# Sections marked SUPERSONIC (M_rel > 1.0) are excluded from XFOIL/KT analysis:
+# XFOIL is a subsonic panel code, and Kármán-Tsien is valid only for M < ~0.87.
+# Tip sections at all conditions are supersonic — transonic rotor aerodynamics
+# would require shock-capturing CFD (RANS/URANS) for accurate modelling.
+target_mach_per_section:
+  takeoff:                 # ISA SL: a=340 m/s, phi=0.429, M_tip=1.234
+    root:     0.654        # W=sqrt(Va²+U_root²)/a → 222/340
+    mid_span: 0.897        # W=sqrt(Va²+U_mid²)/a  → 305/340
+    tip:      1.342        # W=sqrt(Va²+U_tip²)/a  → SUPERSONIC — excluded
+  climb:                   # FL150: a=322 m/s, phi=0.396, M_tip=1.217
+    root:     0.613        # W=197/322
+    mid_span: 0.863        # W=278/322
+    tip:      1.308        # W=421/322 → SUPERSONIC — excluded
+  cruise:                  # FL350: a=295 m/s, phi=0.411, M_tip=1.237
+    root:     0.638        # W=188/295
+    mid_span: 0.888        # W=262/295
+    tip:      1.338        # W=395/295 → SUPERSONIC — excluded
+  descent:                 # FL100: a=328 m/s, phi=0.351, M_tip=1.086
+    root:     0.509        # W=167/328
+    mid_span: 0.744        # W=244/328
+    tip:      1.150        # W=377/328 → SUPERSONIC — excluded
+
+# Ncrit (transition parameter) for each flight condition
+# Turbofan fan inlet turbulence intensity ~0.5-1 % → Ncrit ~ 3-4
+# Formula: Ncrit = -8.43 - 2.4*ln(Tu);  Tu=0.5% → 4.3, Tu=1% → 2.6
+# Using 4 for all phases (conservative turbomachinery value).
+# Previous value of 5-6 corresponded to Tu≈0.1-0.3 % (clean wind-tunnel),
+# which over-estimates laminar run length for fan inflow.
+# Ref: Mack (1977); Drela & Youngren XFOIL 6.9 docs, sec. 4.
+ncrit:
+  takeoff: 4.0
+  climb:   4.0
+  cruise:  4.0
+  descent: 4.0
+
+# Angle of attack range for simulations
+alpha:
+  min: -5.0
+  max: 18.0
+  step: 0.15
+
+# Airfoil selection stage (Stage 1) — multi-condition, mission-weighted evaluation
+#
+# Each condition draws Re and Ncrit from the tables above.
+# Weights are normalised automatically (they sum to 1.0 here for clarity).
+# Alpha range covers the realistic fan-blade incidence window; no need to reach
+# stall at 20° — the blade never operates there.
+selection:
+  conditions:
+    - label:            cruise_mid      # design point — highest efficiency weight
+      flight_condition: cruise
+      section:          mid_span
+      weight:           0.40
+    - label:            takeoff_mid     # stall-margin check, highest blade loading
+      flight_condition: takeoff
+      section:          mid_span
+      weight:           0.30
+    - label:            climb_mid       # efficiency in climb
+      flight_condition: climb
+      section:          mid_span
+      weight:           0.20
+    - label:            cruise_root     # low-Re, most demanding for XFOIL
+      flight_condition: cruise
+      section:          root
+      weight:           0.10
+  alpha_min:  -2.0    # realistic fan-blade incidence range (rel. to chord)
+  alpha_max:  18.0    # NACA 6-series stall at ~15-17° at these Re; 18° captures it
+  alpha_step:  0.15
+
+# XFOIL solver settings
+# Tuning these avoids editing Python source. All values match XfoilSettings defaults.
+xfoil:
+  iter: 200             # Max viscous iterations per alpha point (XFOIL ITER command)
+  timeout_selection_s: 60.0   # Subprocess timeout for Stage 1 (single Re, short alpha range)
+  timeout_final_s: 180.0      # Subprocess timeout for Stage 2 (full alpha range, 12 cases)
+  max_retries: 3        # Max retries on timeout or non-zero exit code
+  retry_wait_s: 1.0     # Wait between retries [s]
+
+# Plot settings — figure_size is used by Stage 4 plots (plots.py)
+plotting:
+  figure_size:
+    width: 6.0
+    height: 4.5
+
+# Flight conditions
+flight_conditions:
+  - takeoff
+  - climb
+  - cruise
+  - descent
+
+# Blade sections
+blade_sections:
+  - root
+  - mid_span
+  - tip
+
+# Airfoil geometry parameters for compressibility corrections
+airfoil_geometry:
+  thickness_ratio: 0.10   # t/c — NACA 65-410 (10% thick)
+  korn_kappa: 0.87        # Korn's equation factor for NACA 6-series conventional airfoils
+
+# Fan geometry — GE9X class (Boeing 777X)
+# Non-dimensional parameterisation: only r_tip_m is a dimensional anchor.
+# All kinematics derived at runtime from ISA atmosphere + M_tip/phi.
+#   ω  = M_tip × a(h) / r_tip       [rad/s]
+#   Va = phi  × ω × r_tip           [m/s]
+#   r  = r_rel × r_tip_m            [m]
+fan_geometry:
+  M_tip_design:             # Tip Mach number U_tip/a per flight condition
+    takeoff: 1.234          # U_tip = 2355 × 2π/60 × 1.70 = 419 m/s; a_SL = 340 m/s
+    climb:   1.217          # U_tip = 2200 × 2π/60 × 1.70 = 391 m/s; a_FL150 = 322 m/s
+    cruise:  1.237          # U_tip = 2050 × 2π/60 × 1.70 = 364 m/s; a_FL350 = 295 m/s
+    descent: 1.086          # U_tip = 2000 × 2π/60 × 1.70 = 356 m/s; a_FL100 = 328 m/s
+  phi_design:               # Flow coefficient φ = Va/(ω·r_tip) per flight condition
+    takeoff: 0.429
+    climb:   0.396
+    cruise:  0.411
+    descent: 0.351
+  hub_to_tip_ratio: 0.312   # r_hub/r_tip — sets root section position
+  r_rel:                    # Non-dimensional blade radii r/r_tip
+    root:     0.312         # = hub_to_tip_ratio (blade root at hub)
+    mid_span: 0.588         # geometric mid-span = (0.312 + 1.000) / 2 ≈ 0.588 (rounded)
+    tip:      1.000
+  r_tip_m: 1.70             # Tip radius [m] — sole dimensional anchor (fan ⌀ = 3.40 m)
+  altitude_m:               # ISA pressure altitude per flight condition [m]
+    takeoff:     0          # Sea level
+    climb:    4572          # FL150 (15 000 ft)
+    cruise:  10668          # FL350 (35 000 ft)
+    descent:  3048          # FL100 (10 000 ft)
+
+# Blade geometry — GE9X class wide-chord composite fan blades
+# Chords derived from Re = rho*W_rel*c/mu at cruise (FL350), consistent with Re table above
+blade_geometry:
+  num_blades: 16          # Number of fan blades Z — GE9X: 16 wide-chord composite
+  solidity:               # σ = c·Z / (2π·r) — non-dimensional cascade parameter
+    # Derived from Re_cruise geometry (c = Re·μ / (ρ·W_rel) at FL350):
+    #   root:     c=0.361 m, r=0.53 m → σ = 0.361·16/(2π·0.53) = 1.73
+    #   mid_span: c=0.456 m, r=1.00 m → σ = 0.456·16/(2π·1.00) = 1.16
+    #   tip:      c=0.463 m, r=1.70 m → σ = 0.463·16/(2π·1.70) = 0.69
+    # Recovery: c [m] = σ · 2π · r / Z  (used only where absolute chord is needed)
+    root:     1.73
+    mid_span: 1.16
+    tip:      0.69
+  theta_camber_deg: 8.0   # Camber angle θ [°] — NACA 65-410
+                          # (Carter's rule: m=0.23 for NACA 6-series, a/c=0.5)
+
+# Minimum alpha for second-peak search at cruise (design condition).
+# At cruise (M=0.93), wave drag suppresses the conventional second peak and shifts
+# the polar shape. Lower alpha_min than the global 3.0° is needed per section.
+# Tuned to the corrected polar shapes at M=0.93 for NACA 65-410:
+#   root:     thicker section (t/c=0.10), stabilises at alpha~2.5°
+#   mid_span: intermediate section, stabilises at alpha~2.2°
+#   tip:      thinnest effective section, earliest stabilisation at alpha~2.0°
+cruise_alpha_min:
+  root: 2.5
+  mid_span: 2.2
+  tip: 2.0
+
+# XFOIL polar cache (default: false to avoid surprising behaviour on first run)
+# When true, polars with identical (airfoil, Re, M, Ncrit, alpha range) are
+# read from results/.polar_cache/ instead of re-running XFOIL.
+# Delete results/.polar_cache/ to force a full re-computation.
+xfoil_cache: false

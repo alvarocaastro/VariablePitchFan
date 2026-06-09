@@ -1,0 +1,32 @@
+airfoils:
+  - name: "NACA 65-210"
+    dat_file: "naca_65-210.dat"
+    family: "NACA 65-series"
+    comment: >-
+      Canonical controlled-diffusion compressor/fan profile with 2% camber and
+      10% thickness, widely used as reference for fan blades in the literature
+      (Saravanamuttoo, Farokhi, Drela/XFOIL).
+
+  - name: "NACA 65-410"
+    dat_file: "naca_65-410.dat"
+    family: "NACA 65-series"
+    comment: >-
+      Controlled-diffusion compressor/fan airfoil with 4% camber and 10%
+      thickness, representative of front-stage fan blades in high-bypass
+      turbofans (see Saravanamuttoo, Farokhi).
+
+  - name: "NACA 63-215"
+    dat_file: "naca_63-215.dat"
+    family: "NACA 63-series"
+    comment: >-
+      Low-drag laminar-flow section adapted to turbomachinery; useful baseline
+      to compare classic laminar profiles with controlled-diffusion 65-series
+      (Drela XFOIL docs, Bertin & Cummings).
+
+  - name: "NACA 0012"
+    dat_file: "naca_0012.dat"
+    family: "NACA 00-series"
+    comment: >-
+      Symmetric 12% thick section widely used as reference; serves as neutral
+      baseline for assessing camber and thickness effects on fan-blade
+      performance (Farokhi, Bertin & Cummings).
